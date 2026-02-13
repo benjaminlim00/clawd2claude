@@ -1,14 +1,42 @@
 # clawd2claude
 
-Give your [Clawdbot](https://openclaw.ai/) hands.
+Clawdbot can read code, run commands, and search your codebase — but only if it has access to your files. The common workaround is uploading your source code to the Clawdbot server, a bad idea if you care about security...
 
-This bridge lets your [Clawdbot](https://openclaw.ai/) reach into your local machine and control [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — review code, run commands, search the codebase — all from Telegram.
+clawd2claude is a bridge that connects your Clawdbot to a local Claude Code instance. Your code stays on your machine. Clawdbot sends prompts over the bridge, Claude Code does the work locally, and only the response text goes back.
 
-Run one bridge per project to keep each Clawdbot scoped to a single codebase.
+## Why not just put your code on the Clawdbot server?
+
+- **Your proprietary code sits on infrastructure you don't control.** The Clawdbot server is third-party. You're trusting it with your entire codebase.
+- **Secrets get exposed.** Env files, API keys, config with credentials — it all goes up with the code. Even if you're careful, one bad `.gitignore` / prompt injection away from a leak.
+- **It's stale the moment you upload it.** Every local change means re-uploading. You're always working against an outdated snapshot.
+
+The bridge avoids all of this. Code never leaves your machine. Claude Code reads it live, with full tool access — file search, grep, bash, the works.
+
+## How it works
+
+```
+Telegram
+  │
+  ▼
+Clawdbot (server)
+  │
+  ▼  HTTP POST
+ngrok (public URL)
+  │
+  ▼  tunnel
+clawd2claude bridge (your machine, port 8081)
+  │
+  ▼  spawns CLI
+Claude Code (your machine, your code)
+```
+
+Clawdbot sends a prompt via its `ccbridge` skill. The request hits your ngrok tunnel, reaches the bridge running on your machine, which spawns `claude` CLI against your local project directory. Claude Code reads files, runs commands, and returns a response. Only that response text travels back up to Clawdbot.
+
+Sessions are tracked per `threadId` so multi-message conversations keep context. One bridge per project.
 
 ## Setup
 
-Requires [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated.
+**Prerequisites:** [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated, [ngrok](https://ngrok.com) installed.
 
 ```bash
 npm install
@@ -16,7 +44,7 @@ cp .env.example .env    # edit with your values
 npm run build && npm start
 ```
 
-Expose it with [ngrok](https://ngrok.com) so Clawdbot can reach it:
+In a separate terminal, expose it:
 
 ```bash
 ngrok http 8081
@@ -25,24 +53,22 @@ ngrok http 8081
 Then teach Clawdbot the skill:
 
 1. Copy `skill/ccbridge/SKILL.md` into your Clawdbot's skill directory
-2. Set `CLAUDE_BRIDGE_URL` and `CLAUDE_BRIDGE_API_KEY` in Clawdbot's environment
+2. Set `CLAUDE_BRIDGE_URL` (your ngrok URL) and `CLAUDE_BRIDGE_API_KEY` in Clawdbot's environment
 
-## Configuration (.env)
+## Configuration
 
-See `.env.example` for all options.
+Only `API_KEY` is required. Everything else has defaults. See `.env.example`.
 
-Only `API_KEY` and `CLAUDE_WORKING_DIR` are required. Everything else has sensible defaults.
-
-| Variable               | Description                                                                                                                                                                                                                                                                                                                                         |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `API_KEY`              | Bearer token that callers must include to authenticate                                                                                                                                                                                                                                                                                              |
-| `CLAUDE_WORKING_DIR`   | The project directory Claude Code operates in                                                                                                                                                                                                                                                                                                       |
-| `PORT`                 | Server port (default `8081`)                                                                                                                                                                                                                                                                                                                        |
-| `CLAUDE_ALLOWED_TOOLS` | Comma-separated list of tools Claude Code can use (default `Read,Grep,Glob,Bash,WebSearch`)                                                                                                                                                                                                                                                         |
-| `CLAUDE_MAX_TURNS`     | Max agentic turns per invocation (default `3`). Each turn is one tool call. Higher values let Claude do more work per request but cost more tokens. 3 is enough for most read/search tasks.                                                                                                                                                         |
-| `CLAUDE_TIMEOUT_MS`    | Timeout per invocation in ms (default `180000`)                                                                                                                                                                                                                                                                                                     |
-| `CLAUDE_SYSTEM_PROMPT` | Appended to Claude Code's system prompt. Claude Code already reads your project's `CLAUDE.md` for context, so this is just for shaping output style. Example: `Keep responses short and use plain text.`                                                                                                                                            |
-| `SESSION_TTL_HOURS`    | Hours before a conversation resets (default `4`). When Clawdbot sends multiple messages with the same `threadId`, they share a Claude session so it remembers prior context. The TTL controls when that session expires — after that, the next message starts fresh. Lower = cheaper (less context replayed per message), higher = more continuity. |
+| Variable               | Default                         | Description                                                                                                               |
+| ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `API_KEY`              | _(required)_                    | Bearer token for authenticating requests                                                                                  |
+| `CLAUDE_WORKING_DIR`   | `process.cwd()`                 | Project directory Claude Code operates in                                                                                 |
+| `PORT`                 | `8081`                          | Server port                                                                                                               |
+| `CLAUDE_ALLOWED_TOOLS` | `Read,Grep,Glob,Bash,WebSearch` | Tools Claude Code can use (comma-separated)                                                                               |
+| `CLAUDE_MAX_TURNS`     | `3`                             | Max tool calls per request. Higher = more work per request, more tokens                                                   |
+| `CLAUDE_TIMEOUT_MS`    | `180000`                        | Timeout per invocation (ms)                                                                                               |
+| `CLAUDE_SYSTEM_PROMPT` | _(empty)_                       | Appended to Claude Code's system prompt. Your project's `CLAUDE.md` is already loaded, so this is for output style tuning |
+| `SESSION_TTL_HOURS`    | `4`                             | Hours before a conversation session expires. Lower = cheaper, higher = more continuity                                    |
 
 ## API
 
@@ -55,6 +81,14 @@ curl -s -X POST http://localhost:8081/message \
   -d '{"prompt": "what files changed in the last commit?", "threadId": "chat-123"}'
 ```
 
+**Request:** `prompt` (required), `threadId` (optional — same thread = shared conversation context).
+
+**Response:**
+
+```json
+{ "result": "...", "threadId": "chat-123", "durationMs": 12345 }
+```
+
 ### `GET /health`
 
-Returns `{"status": "ok"}`.
+Returns `{"status": "ok", "uptime": 123}`.
