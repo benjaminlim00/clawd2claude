@@ -2,18 +2,19 @@
 
 Give your [Clawdbot](https://openclaw.ai/) hands.
 
-Set up read-only GitHub access so Clawdbot can see your repo, then use a cheap model (like GLM) to orchestrate — spin up subagents that call Claude Code on your local machine through this bridge. The cheap model coordinates and plans; Claude Code does the heavy lifting with full tool access against your live codebase.
+Give Clawdbot read-only access to your GitHub repo so it understands your codebase, then point it at this bridge so it can actually do things — run commands, execute tests, search files, modify code — all on your local machine via Claude Code.
 
-**The result:** you get Claude Code's capabilities (file search, grep, bash, tests, builds) orchestrated by a model that costs a fraction of the price. Run many subagents in parallel without burning through expensive tokens on coordination work.
+## Why not just use GitHub access alone?
 
-## Why use a bridge instead of just GitHub access?
+GitHub gives Clawdbot **read-only access to committed code**. That's useful for context, but it can't:
 
-GitHub repo access gives Clawdbot **eyes** — it can read your committed code. The bridge gives it **hands:**
+- **Run commands.** No tests, builds, git operations, or bash.
+- **See your working state.** Uncommitted changes, local branches, untracked files — invisible.
+- **Use Claude Code's tooling.** No grep, glob, file search, or web search against your actual directory.
 
-- **Run commands.** Tests, builds, git operations, arbitrary bash — not just read files.
-- **See live state.** Uncommitted changes, local branches, untracked files — not just what's pushed.
-- **Full Claude Code tooling.** Grep, glob, file search, web search — all running locally against your actual working directory.
-- **No secrets exposed.** Your code and env files stay on your machine. No OAuth grants to third parties.
+The bridge adds all of this. Clawdbot reads your repo to understand the code, then dispatches work to Claude Code running locally where it has full tool access.
+
+**Security bonus:** env files, secrets, and anything not committed to GitHub never leave your machine. Only Claude Code's response text goes back through the bridge.
 
 ## How it works
 
