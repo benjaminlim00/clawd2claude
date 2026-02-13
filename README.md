@@ -1,16 +1,19 @@
 # clawd2claude
 
-Clawdbot can read code, run commands, and search your codebase — but only if it has access to your files. The common workaround is uploading your source code to the Clawdbot server, a bad idea if you care about security...
+Give your [Clawdbot](https://openclaw.ai/) hands.
 
-clawd2claude is a bridge that connects your Clawdbot to a local Claude Code instance. Your code stays on your machine. Clawdbot sends prompts over the bridge, Claude Code does the work locally, and only the response text goes back.
+Set up read-only GitHub access so Clawdbot can see your repo, then use a cheap model (like GLM) to orchestrate — spin up subagents that call Claude Code on your local machine through this bridge. The cheap model coordinates and plans; Claude Code does the heavy lifting with full tool access against your live codebase.
 
-## Why not just put your code on the Clawdbot server?
+**The result:** you get Claude Code's capabilities (file search, grep, bash, tests, builds) orchestrated by a model that costs a fraction of the price. Run many subagents in parallel without burning through expensive tokens on coordination work.
 
-- **Your proprietary code sits on infrastructure you don't control.** The Clawdbot server is third-party. You're trusting it with your entire codebase.
-- **Secrets get exposed.** Env files, API keys, config with credentials — it all goes up with the code. Even if you're careful, one bad `.gitignore` / prompt injection away from a leak.
-- **It's stale the moment you upload it.** Every local change means re-uploading. You're always working against an outdated snapshot.
+## Why use a bridge instead of just GitHub access?
 
-The bridge avoids all of this. Code never leaves your machine. Claude Code reads it live, with full tool access — file search, grep, bash, the works.
+GitHub repo access gives Clawdbot **eyes** — it can read your committed code. The bridge gives it **hands:**
+
+- **Run commands.** Tests, builds, git operations, arbitrary bash — not just read files.
+- **See live state.** Uncommitted changes, local branches, untracked files — not just what's pushed.
+- **Full Claude Code tooling.** Grep, glob, file search, web search — all running locally against your actual working directory.
+- **No secrets exposed.** Your code and env files stay on your machine. No OAuth grants to third parties.
 
 ## How it works
 
