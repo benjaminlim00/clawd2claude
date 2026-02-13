@@ -1,7 +1,7 @@
 {
-  "name": "clawdbot-ccbridge",
+  "name": "clawd2claude",
   "version": "1.0.0",
-  "description": "Clawdbot Claude Code bridge — HTTP API for invoking Claude Code CLI",
+  "description": "Bridge your Clawdbot to Claude Code",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
