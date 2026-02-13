@@ -11,6 +11,7 @@ const invokeClaude = (options: ClaudeInvocation): Promise<ClaudeCliResult> => {
       options.prompt,
       "--output-format",
       "json",
+      "--dangerously-skip-permissions",
       "--max-turns",
       String(options.maxTurns ?? DEFAULT_MAX_TURNS),
     ];
